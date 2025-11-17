@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Astronaut vs UFO - Mini Game</title>
+<style>
+  :root{
+    --bg:#071b3a;
+    --ground:#0b243f;
+    --accent:#6be0ff;
+    --text:#e6f7ff;
+  }
+  html,body{height:100%;margin:0;font-family:Inter, system-ui, Arial;}
+  body{
+    background: linear-gradient(180deg,var(--bg) 0%, #05203a 70%);
+    display:flex;align-items:center;justify-content:center;
+    color:var(--text);
+  }
+  #gameWrap{
+    width:900px; max-width:96vw; height:540px; max-height:86vh;
+    background: linear-gradient(180deg, rgba(255,255,255,0.05), transparent);
+    border-radius:14px; box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+    position:relative; overflow:hidden;
+    border:1px solid rgba(255,255,255,0.04);
+  }
+  canvas{display:block; width:100%; height:100%;}
+  .centerUI{
+    position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+    z-index:40; text-align:center;
+  }
+  .btn{
+    margin-top:12px; padding:10px 16px; border-radius:10px; cursor:pointer;
+    background:linear-gradient(180deg,var(--accent), #2fb1d4);
+    color:#002b38; font-weight:700; border:none; box-shadow: 0 6px 12px rgba(0,0,0,0.3);
+  }
+  .gameLogo {
+  width: 380px; /* chỉnh kích thước logo */
+  max-width: 80%;
+  animation: logoFloat 3s ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 25px rgba(107, 224, 255, 0.7));
+}
+
+@keyframes logoFloat {
+  from {
+    transform: translateY(0px);
+    filter: drop-shadow(0 0 15px rgba(107, 224, 255, 0.6));
+  }
+  to {
+    transform: translateY(-10px);
+    filter: drop-shadow(0 0 35px rgba(107, 224, 255, 1));
+  }
+}
+</style>
+</head>
+<body>
+  <div id="gameWrap">
+    <canvas id="c"></canvas>
+    <div class="centerUI" id="startScreen">
+      <img src="logo.png" alt="Game Logo" class="gameLogo" />
+      <p>Nhấn SPACE hoặc ↑ để nhảy qua UFO.</p>
+      <button class="btn" id="startBtn">Bắt đầu</button>
+      <p style="margin-top:10px; color:#7be0ff;">Tác giả: Tiệp - Phước - Nguyên - Phong 🚀</p>
+    </div>
+  </div>
+
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+canvas.width = 900;
+canvas.height = 540;
+
+let gameRunning = false;
+let score = 0;
+let level = 1;
+
+// 🌌 Ảnh nền
+const skyImg = new Image();
+skyImg.src = "moon-bg.png";
+const groundImg = new Image();
+groundImg.src = "ground.png";
+
+// 🌟 Hiệu ứng sao
+const stars = [];
+const numStars = 120;
+for (let i = 0; i < numStars; i++) {
+  stars.push({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    size: Math.random() * 2,
+    speed: 0.2 + Math.random() * 0.3,
+    opacity: Math.random(),
+    flicker: Math.random() * 0.02
+  });
+}
+
+let shootingStar = null;
+let shootingTimer = 0;
+
+function spawnShootingStar() {
+  shootingStar = {
+    x: Math.random() * canvas.width * 0.4,
+    y: Math.random() * canvas.height * 0.3,
+    length: 180 + Math.random() * 100,
+    speed: 10 + Math.random() * 4,
+    opacity: 1,
+    angle: Math.random() * 0.3 + 0.2
+  };
+}
+
+function drawShootingStar() {
+  if (!shootingStar) return;
+  const tailX = shootingStar.x - Math.cos(shootingStar.angle) * shootingStar.length;
+  const tailY = shootingStar.y - Math.sin(shootingStar.angle) * shootingStar.length;
+
+  const grad = ctx.createLinearGradient(tailX, tailY, shootingStar.x, shootingStar.y);
+  grad.addColorStop(0, `rgba(255,255,255,0)`);
+  grad.addColorStop(1, `rgba(255,255,255,${shootingStar.opacity})`);
+
+  ctx.strokeStyle = grad;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(tailX, tailY);
+  ctx.lineTo(shootingStar.x, shootingStar.y);
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(shootingStar.x, shootingStar.y, 4, 0, Math.PI * 2);
+  ctx.fillStyle = `rgba(255,255,255,${shootingStar.opacity})`;
+  ctx.fill();
+
+  shootingStar.x += shootingStar.speed;
+  shootingStar.y += shootingStar.speed * 0.3;
+  shootingStar.opacity -= 0.01;
+
+  if (shootingStar.opacity <= 0) shootingStar = null;
+}
+
+function drawStars() {
+  for (let s of stars) {
+    s.x -= s.speed;
+    if (s.x < 0) s.x = canvas.width;
+    s.opacity += s.flicker * (Math.random() > 0.5 ? 1 : -1);
+    s.opacity = Math.max(0.2, Math.min(1, s.opacity));
+
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+    const colors = ["#ffffff", "#aeeaff", "#ffd6a5", "#b5baff"];
+    ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
+    ctx.globalAlpha = s.opacity;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  shootingTimer++;
+  if (shootingTimer > 400 && !shootingStar) {
+    spawnShootingStar();
+    shootingTimer = 0;
+  }
+  drawShootingStar();
+}
+
+// 🪐 Mặt đất
+const groundY = canvas.height - 80;
+
+// 👩‍🚀 Người chơi
+const player = {
+  x: 100,
+  y: groundY - 70,
+  width: 70,
+  height: 70,
+  vy: 0,
+  gravity: 0.8,
+  jumpPower: -17,
+  isJumping: false
+};
+
+// 👽 UFO
+const ufos = [];
+let ufoTimer = 0;
+let ufoInterval = 120;
+
+// 🖼️ Hình ảnh
+const astronautImg = new Image();
+astronautImg.src = "astronaut.png";
+const ufoImg = new Image();
+ufoImg.src = "ufo.png";
+
+// 🔊 Âm thanh
+const jumpSound = new Audio("jump.mp3");
+jumpSound.volume = 1.0;
+const deadSound = new Audio("dead.mp3");
+deadSound.volume = 1.0;
+const levelUpSound = new Audio("levelup.mp3");
+levelUpSound.volume = 1.0;
+
+// 🕹️ Hàm nhảy
+function jump() {
+  if (!player.isJumping) {
+    player.vy = player.jumpPower;
+    player.isJumping = true;
+    jumpSound.currentTime = 0;
+    jumpSound.play().catch(()=>{});
+  }
+}
+
+function resetGame() {
+  player.y = groundY - player.height;
+  player.vy = 0;
+  player.isJumping = false;
+  ufos.length = 0;
+  ufoTimer = 0;
+  score = 0;
+  level = 1;
+}
+
+document.getElementById("startBtn").onclick = () => {
+  document.getElementById("startScreen").style.display = "none";
+  resetGame();
+  gameRunning = true;
+
+  jumpSound.play().then(()=>jumpSound.pause()).catch(()=>{});
+  deadSound.play().then(()=>deadSound.pause()).catch(()=>{});
+  levelUpSound.play().then(()=>levelUpSound.pause()).catch(()=>{});
+
+  loop();
+};
+
+document.addEventListener("keydown", e => {
+  if (e.code === "Space" || e.code === "ArrowUp") jump();
+});
+
+// 🎯 Kiểm tra va chạm
+function isCollision(a, b) {
+  const paddingX = 15;
+  const paddingY = 10;
+  return (
+    a.x + a.width - paddingX > b.x + paddingX &&
+    a.x + paddingX < b.x + b.width - paddingX &&
+    a.y + a.height - paddingY > b.y + paddingY &&
+    a.y + paddingY < b.y + b.height - paddingY
+  );
+}
+
+// 🎮 Game loop
+function loop() {
+  if (!gameRunning) return;
+  requestAnimationFrame(loop);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (skyImg.complete) ctx.drawImage(skyImg, 0, 0, canvas.width, canvas.height);
+  drawStars();
+
+  if (groundImg.complete)
+    ctx.drawImage(groundImg, 0, groundY, canvas.width, 80);
+  else {
+    ctx.fillStyle = "#0b243f";
+    ctx.fillRect(0, groundY, canvas.width, 80);
+  }
+
+  // 👩‍🚀 Nhân vật
+  ctx.save();
+  const tilt = player.isJumping ? player.vy * 0.03 : 0;
+  ctx.translate(player.x + player.width / 2, player.y + player.height / 2);
+  ctx.rotate(tilt);
+  ctx.drawImage(astronautImg, -player.width / 2, -player.height / 2, player.width, player.height);
+  ctx.restore();
+
+  // Cập nhật nhảy
+  player.vy += player.gravity;
+  player.y += player.vy;
+  if (player.y > groundY - player.height) {
+    player.y = groundY - player.height;
+    player.vy = 0;
+    player.isJumping = false;
+  }
+
+  // 👽 UFO
+  ufoTimer++;
+  if (ufoTimer > ufoInterval) {
+    ufos.push({ x: canvas.width, y: groundY - 60, width: 80, height: 60, speed: 6 });
+    ufoTimer = 0;
+  }
+
+  for (let i = 0; i < ufos.length; i++) {
+    const u = ufos[i];
+    u.x -= u.speed;
+    ctx.drawImage(ufoImg, u.x, u.y, u.width, u.height);
+
+    if (isCollision(player, u)) {
+      gameRunning = false;
+      deadSound.currentTime = 0;
+      deadSound.play().catch(()=>{});
+      setTimeout(() => {
+        alert("💥 Úi, bạn chết queo rồi! Điểm: " + score);
+        location.reload();
+      }, 600);
+      return;
+    }
+
+    if (u.x + u.width < 0) {
+      ufos.splice(i, 1);
+      i--;
+      score++;
+      if (score % 10 === 0 && ufoInterval > 60) {
+        ufoInterval -= 5;
+        level++;
+        levelUpSound.currentTime = 0;
+        levelUpSound.play().catch(()=>{});
+      }
+    }
+  }
+
+  // 🧾 Hiển thị điểm và cấp
+  ctx.fillStyle = "white";
+  ctx.font = "20px Arial";
+  ctx.fillText("Điểm: " + score, 20, 30);
+  ctx.fillText("Cấp: " + level, 20, 55);
+}
+</script>
+</body>
+</html>
